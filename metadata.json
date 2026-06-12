@@ -1,0 +1,6 @@
+{
+  "name": "El Kiosco",
+  "description": "Videojuego de simulación de un kiosco-almacén argentino. Atendé a famosos en estilo GTA Chibi, cobrá el precio correcto y da el vuelto exacto.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
