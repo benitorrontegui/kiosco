@@ -1,14 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import * as THREE from "three";
 import {
   Store,
-  Users,
-  DollarSign,
   Award,
+  DollarSign,
   Clock,
-  ArrowRight,
-  BookOpen,
-  CheckCircle,
-  AlertOctagon,
   RotateCcw,
   Volume2,
   VolumeX,
@@ -20,10 +16,15 @@ import {
   HelpCircle,
   Terminal,
   Copy,
-  Info
+  Info,
+  ChevronRight,
+  User,
+  ShoppingBag,
+  Sliders,
+  Play
 } from "lucide-react";
 
-// Types corresponding exactly to the user specification
+// Types corresponding exactly to specifications
 export type TimeOfDay = "mañana" | "tarde" | "noche";
 
 interface Client {
@@ -34,6 +35,7 @@ interface Client {
   requires_id: boolean;
   requested_product: string;
   mood: "feliz" | "neutro" | "exigente" | "dramatico";
+  pagaCon: number;
 }
 
 interface Cashier {
@@ -117,85 +119,109 @@ const IS_ADULT_ONLY: Record<keyof Stock, boolean> = {
   Chocolate: false
 };
 
-// Celebrity details
+// Colors of the items for THREE.js materials
+const PRODUCT_COLORS: Record<keyof Stock, string> = {
+  "Coca-Cola": "#dc2626", // red
+  Fanta: "#ea580c", // orange
+  Agua: "#38bdf8", // light blue
+  Cerveza: "#eab308", // golden yellow
+  Vino: "#701a75", // deep purple
+  Marlboro: "#f87171", // red/white pack
+  Camel: "#fbbf24", // yellow/tan pack
+  "Lucky Strike": "#1e293b", // dark blue pack with green/white circle
+  Alfajor: "#7c2d12", // chocolate brown
+  Chicles: "#ec4899", // bright pink
+  Pastillas: "#f1f5f9", // pale mint
+  Chupetín: "#a855f7", // violet swirly
+  Chocolate: "#451a03" // thick brown block
+};
+
+// Celebrity details with interactive coordinates inside 3D environment
 const GAME_CLIENTS: Client[] = [
   {
     name: "Mirtha Legrand",
-    appearance: "Miniatura elegantísima de proporciones caricaturescas con rulitos plateados perfectamente lacados de volumen 3D, collar de perlas enorme y rictus exigente de conductora legendaria.",
-    entrance: "Entra al almacén caminando despacito pero con erguida superioridad tridimensional, escoltada por un chofer imaginario que le abre paso.",
-    dialogue: "¡Buenas tardes! ¿Este alfajor es verdaderamente artesanal? Traeme uno de chocolate, mi amor, y que esté a temperatura de cava. ¡Ojo que tengo ojos de lince en mi mesaza!",
+    appearance: "Miniatura elegantísima de proporciones caricaturescas con rulitos plateados de volumen 3D, collar de perlas enorme y rictus exigente de conductora legendaria.",
+    entrance: "Entra al almacén caminando despacito pero con erguida superioridad tridimensional, escoltada por un chofer imaginario.",
+    dialogue: "¡Buenas tardes! ¿Este alfajor es verdaderamente artesanal? Traeme uno, mi amor, y que esté a temperatura de cava. ¡Ojo que tengo ojos de lince en mi mesaza!",
     requires_id: false,
     requested_product: "Alfajor",
-    mood: "exigente"
+    mood: "exigente",
+    pagaCon: 1000
   },
   {
     name: "Susana Giménez",
-    appearance: "Rubia exhuberante tridimensional con anteojos de sol negros gigantescos que tapan la mitad de su rostro, tapado de leopardo con volumen y labial carmín brillante.",
-    entrance: "Llega tocando la puerta de vidrio del local mientras grita de emoción por haber encontrado un kiosco abierto.",
+    appearance: "Rubia exhuberante tridimensional con anteojos de sol negros gigantescos que tapan la mitad de su rostro, tapado de leopardo y labial carmín brillante.",
+    entrance: "Llega tocando la puerta de vidrio del local mientras grita de emoción por encontrar un kiosco abierto.",
     dialogue: "¡Ay, hola che! Me vivo de sed por favor... Dame algo light, ¿este agua no tiene nada de sodio, no? ¡Ay, qué amoroso sos!",
     requires_id: false,
     requested_product: "Agua",
-    mood: "feliz"
+    mood: "feliz",
+    pagaCon: 1000
   },
   {
     name: "Ricardo Fort",
-    appearance: "Fantasma musculoso recortado en rosa neón brillante con jopo perfecto de chocolate de 15cm, barba de candado ultra-detallada y tapado de zorro gris con pelaje modelado 3D.",
-    entrance: "Aparece atravesando la puerta flotando pacíficamente rodeado de una estela dorada y ruidos de trompetas de Miami.",
-    dialogue: "¡MAIAMEEE! ¡Chicos, cortaron toda la looz de la fábrica de chocolates! Exijo el chocolate más caro que tengas y una cerveza bien fría para mitigar el sofoco cósmico.",
+    appearance: "Fantasma musculoso recortado en rosa neón con jopo perfecto de chocolate de 15cm, barba de candado ultra-detallada y tapado de zorro gris modelado 3D.",
+    entrance: "Aparece atravesando la puerta de vidrio flotando pacíficamente, rodeado de destellos y murmullos de Miami.",
+    dialogue: "¡MAIAMEEE! ¡Chicos, cortaron toda la looz de la fábrica! Exijo una cerveza bien helada para mitigar este sofoco estival cósmico.",
     requires_id: true,
     requested_product: "Cerveza",
-    mood: "dramatico"
+    mood: "dramatico",
+    pagaCon: 2000
   },
   {
     name: "Wanda Nara",
-    appearance: "Cabello platinado lacio con profundidad y sombras 3D, uñas acrílicas extremadamente largas de color rosa flúo y campera de plumas importada de Europa.",
-    entrance: "Entra al local hablando por videollamada a los gritos, firmando contratos para la televisión italiana antes de mirarte.",
-    dialogue: "Hola, fiera. ¿Hacen canjes de publicidad en historias acá? Me llevo unos chicles masticables sabor mentol puro. Si preferís te pago, tengo tarjeta black.",
+    appearance: "Cabello platinado lacio con profundidad, uñas acrílicas sumamente largas de color rosa flúo y campera acolchada importada de Milán.",
+    entrance: "Entra hablando por videollamada a los gritos, firmando contratos multimillonarios antes de mirarte.",
+    dialogue: "Hola, fiera. ¿Hacen canjes de publicidad en historias acá? Me llevo unos chicles masticables antes de subirme al vuelo privado.",
     requires_id: false,
     requested_product: "Chicles",
-    mood: "neutro"
+    mood: "neutro",
+    pagaCon: 500
   },
   {
     name: "Marcelo Tinelli",
-    appearance: "Sonrisa blanca impecable de carillas de porcelana resplandeciente, cuerpo Chibi con saco entallado negro con brillo satinado y un micrófono con tachas antiguos.",
-    entrance: "Entra saltando en un pie, arengando a un público imaginario detrás de él mientras tira confeti plateado.",
-    dialogue: "¡Buenas noches América! ¡Señoras y señores, hoy con el desafío de engullir este alfajor de un solo bocado! Dame uno ya, fiera.",
+    appearance: "Sonrisa blanca impecable de porcelana resplandeciente, cuerpo Chibi con saco negro satinado brillante y un micrófono con tachas antiguos.",
+    entrance: "Entra saltando en un pie, arengando a un público imaginario detrás de él mientras tira confeti.",
+    dialogue: "¡Buenas noches América! ¡Señoras y señores, hoy con el desafío de engullir este alfajor de un bocado! Dame uno ya, fiera.",
     requires_id: false,
     requested_product: "Alfajor",
-    mood: "feliz"
+    mood: "feliz",
+    pagaCon: 1000
   },
   {
     name: "L-Gante",
-    appearance: "Gorra de visera plana perfectamente torcida de 45 grados, brackets dentales metálicos que chispean bajo los focos y cadenas macizas de oro Cumbia 420 fluyendo sobre ropa deportiva.",
+    appearance: "Gorra de visera plana perfectamente torcida de 5 grados, brackets dentales metálicos que chispean y cadenas macizas de oro Cumbia 420 fluyendo sobre ropa deportiva.",
     entrance: "Ingresa bailando un paso callejero mientras sostiene una botella de plástico cortada a la mitad.",
-    dialogue: "¡Qué onda, pa! Cumbia 420 al toque con la Mafilia. Pasame un vino de carton místico de los fuertes para armar un viajero re piola con los pibes.",
+    dialogue: "¡Qué onda, pa! Cumbia 420 al toque con la Mafilia. Pasame un vino potente de los tradicionales para armar un viajero de previa bien piola.",
     requires_id: true,
     requested_product: "Vino",
-    mood: "neutro"
+    mood: "neutro",
+    pagaCon: 10000
   },
   {
     name: "Juana Viale",
-    appearance: "Silueta hippie-chic idéntica a Mirtha pero vestida en lino ecológico color crudo con trenzas de hilo rústico y pómulos esculpidos sumamente definidos en 3D.",
-    entrance: "Entra de golpe con mirada altanera, analizando si hay tachas plásticas o si todo el almacén daña el ecosistema.",
-    dialogue: "Buenas. Dame un paquete de cigarrillos Lucky Strike click y no me des bolsa de plástico porque es un atentado ambiental insoportable.",
+    appearance: "Silueta hippie-chic idéntica a Mirtha pero vestida en lino ecológico color crudo con trenzas de hilo rústico y pómulos esculpidos sumamente definidos.",
+    entrance: "Entra de golpe con mirada altanera, analizando si el local usa plásticos descartables nocivos para el ecosistema.",
+    dialogue: "Buenas. Dame un atado de Lucky Strike y no me des bolsa plástica porque es un atentado ambiental insoportable.",
     requires_id: true,
     requested_product: "Lucky Strike",
-    mood: "exigente"
+    mood: "exigente",
+    pagaCon: 2000
   },
   {
     name: "Diego Maradona",
-    appearance: "Espíritu cósmico de rulos flotantes negros de 1986, arito brillante de diamante que destella pura elegancia y una pelota de cuero azteca adherida a su pie izquierdo.",
-    entrance: "Entra flotando suavemente dominando el esférico de taco y hombro, lanzando besos al aire místico porteño.",
-    dialogue: "Eeeeeeeee... fiera, ¿cómo andás? La pelota no se mancha, pa. Pasame el vino más noble que tengas para brindar por el pueblo.",
-    requires_id: true,
-    requested_product: "Vino",
-    mood: "dramatico"
+    appearance: "Espíritu cósmico de rulos flotantes negros de la copa de 1986, arito brillante de diamante destellando y pelota de cuero adherida al pie izquierdo.",
+    entrance: "Entra flotando suavemente dominando el esférico con maestría mística.",
+    dialogue: "Eeeeeeeee... fiera, ¿cómo andás? La pelota no se mancha, pa. Pasame una buena botella de Fanta bien helada para festejar.",
+    requires_id: false,
+    requested_product: "Fanta",
+    mood: "dramatico",
+    pagaCon: 1000
   }
 ];
 
 export default function App() {
   // Gameplay states
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [points, setPoints] = useState<number>(0);
   const [cash, setCash] = useState<number>(5000);
   const [salesCount, setSalesCount] = useState<number>(0);
@@ -224,15 +250,24 @@ export default function App() {
   const [commandInput, setCommandInput] = useState<string>("");
   const [isCopySuccess, setIsCopySuccess] = useState<boolean>(false);
   const [customConsoleLog, setCustomConsoleLog] = useState<string[]>([]);
-
-  // Sound context references
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  
+  // Custom HUD select highlights for raycast clicks
+  const [shelfHoveredItem, setShelfHoveredItem] = useState<string | null>(null);
 
-  // Initialize first view
+  // References for Three.js scene container
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const activeMeshRef = useRef<THREE.Group | null>(null); // holds actual client custom geometry card
+  const neonLightsRef = useRef<THREE.PointLight[]>([]);
+  const directionalLightRef = useRef<THREE.DirectionalLight | null>(null);
+  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
+
+  // Initialize and select a random starting customer
   useEffect(() => {
-    // Pick first client at random
     const rand = Math.floor(Math.random() * GAME_CLIENTS.length);
     setActiveClientIndex(rand);
+    setCustomConsoleLog(["[SISTEMA] Kiosco reabierto con $5000 de presupuesto base. Las luces automáticas se encienden."]);
   }, []);
 
   const getActiveClient = (): Client => {
@@ -240,7 +275,6 @@ export default function App() {
   };
 
   const getNextClientName = (): string | null => {
-    // Give a small teaser hint or name of next client
     const nextIdx = (activeClientIndex + 1) % GAME_CLIENTS.length;
     return GAME_CLIENTS[nextIdx].name;
   };
@@ -248,24 +282,23 @@ export default function App() {
   const getSceneDescription = (turn: TimeOfDay) => {
     switch (turn) {
       case "mañana":
-        return "El sol amanece de costado iluminando con destellos cálidos los estantes polvorientos del almacén. El zumbido constante de la heladera de chapa resuena como un bajo profundo.";
+        return "El sol amanece de costado cruzando la ventana con destellos cálidos dorados por sobre los estantes. Se oye el zumbido de la heladera de chapa de fondo.";
       case "tarde":
-        return "La resolana ardiente del mediodía se filtra por el toldo rojo gastado del local. Afuera se escucha el eco de bocinas porteñas e inspectores municipales apresurados frente a la caramelera doble.";
+        return "La resolana ardiente de la siesta de avenida Rivadavia calienta el toldo rojo exterior. El polvo baila flotando bajo la luz intensa del mediodía.";
       case "noche":
-        return "Carteles parpadeantes de neón rojo y azul iluminan el interior del local dibujando sombras nítidas y misteriosas sobre las botellas de vidrio heladas.";
+        return "Carteles parpadeantes de neón rojo y azul eléctrico recortan sombras nítidas muy profundas. Se respira mística y misterio de local nocturno porteño.";
     }
   };
 
-  // Build the state JSON demanded by the user prompt
+  // Build the state JSON required by user configuration
   const getGameStateJSON = (): GameStateJSON => {
     const active = getActiveClient();
     
-    // Simple dry response from cashier
-    let dryResponse = "Buenas tardes, ¿qué te doy?";
+    let dryResponse = "Buenas pibe, ¿qué te doy?";
     if (saleResult) {
-      dryResponse = saleResult.success ? "Impecable, gracias por la compra flaco." : "Uff... no sé qué pasó. Presta atención.";
+      dryResponse = saleResult.success ? "Impecable fiera, gracias por comprar en el barrio." : "Uff... qué dolor. Pasame bien la plata la próxima.";
     } else if (isDniCheckedThisTurn) {
-      dryResponse = "Mirá que tengo cara de vigilante pero el documento es obligatorio.";
+      dryResponse = "Chequeado. Tenés cara de pibe pero el plástico está en regla.";
     }
 
     return {
@@ -289,7 +322,7 @@ export default function App() {
     };
   };
 
-  // Copy JSON Utility
+  // Copy structured JSON payload
   const copyJSONToClipboard = () => {
     const jsonStr = JSON.stringify(getGameStateJSON(), null, 2);
     navigator.clipboard.writeText(jsonStr).then(() => {
@@ -298,50 +331,72 @@ export default function App() {
     });
   };
 
-  // Play audio triggers
-  const playSound = (type: "cash" | "error" | "click") => {
+  // Safe sound synthesizer triggers using Web Audio API (No files required)
+  const playSound = (type: "cash" | "error" | "click" | "bell") => {
     if (isMuted) return;
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const now = audioCtx.currentTime;
       if (type === "cash") {
+        // Double sweet ring
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc1.frequency.setValueAtTime(880, now);
+        osc1.frequency.exponentialRampToValueAtTime(1760, now + 0.15);
+        osc2.frequency.setValueAtTime(1100, now);
+        osc2.frequency.exponentialRampToValueAtTime(2200, now + 0.15);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc1.start();
+        osc2.start();
+        osc1.stop(now + 0.5);
+        osc2.stop(now + 0.5);
+      } else if (type === "error") {
+        // Sour buzzer
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.frequency.setValueAtTime(1200, now);
-        osc.frequency.exponentialRampToValueAtTime(1800, now + 0.15);
-        gain.gain.setValueAtTime(0.08, now);
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.linearRampToValueAtTime(80, now + 0.35);
+        gain.gain.setValueAtTime(0.12, now);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
-        osc.stop(now + 0.5);
-      } else if (type === "error") {
+        osc.stop(now + 0.45);
+      } else if (type === "bell") {
+        // High crisp shop door bell
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(150, now);
-        osc.frequency.linearRampToValueAtTime(70, now + 0.3);
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(1500, now);
+        osc.frequency.exponentialRampToValueAtTime(2500, now + 0.08);
+        gain.gain.setValueAtTime(0.06, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
-        osc.stop(now + 0.4);
+        osc.stop(now + 0.3);
       } else {
+        // Basic click
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.frequency.setValueAtTime(1000, now);
-        gain.gain.setValueAtTime(0.05, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.frequency.setValueAtTime(900, now);
+        gain.gain.setValueAtTime(0.04, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
         osc.connect(gain);
         gain.connect(audioCtx.destination);
         osc.start();
-        osc.stop(now + 0.06);
+        osc.stop(now + 0.05);
       }
-    } catch(e) {}
+    } catch (e) {}
   };
 
-  // Process the command entered in terminal or clicked
+  // Primary business model command executor (accepts custom shortcuts and typed text)
   const processGameCommand = (cmd: string) => {
     const trimmed = cmd.trim();
     if (!trimmed) return;
@@ -352,59 +407,50 @@ export default function App() {
     const requestedStockKey = active.requested_product as keyof Stock;
     const currentProductPrice = PRODUCT_PRICES[requestedStockKey];
 
-    // Determine how much the famous pays with
-    let pagaCon = 1000;
-    if (currentProductPrice > 2000) pagaCon = 5000;
-    else if (currentProductPrice > 1000) pagaCon = 2000;
-    else if (currentProductPrice > 500) pagaCon = 1000;
-    else pagaCon = 500;
-
-    // 1. "Pido DNI antes de vender alcohol o cigarros"
-    if (cleanLower.includes("pido dni") || cleanLower.includes("dni") || cleanLower.includes("documento")) {
+    // DNI execution check
+    if (cleanLower.includes("pido dni") || cleanLower.includes("dni") || cleanLower.includes("documento") || cleanLower.includes("identidad")) {
       setIsDniCheckedThisTurn(true);
       playSound("click");
-      setKiosqueroComment("Te miro fijo de reojo... no abuses que soy un laburante cansado. Mostrame la tarjeta.");
-      setCustomConsoleLog(prev => [...prev, `[SISTEMA] DNI de ${active.name} verificado correctamente.`]);
+      setKiosqueroComment("Te clavo los ojos de reojo con la peor de las ondas. Mostrame la credencial pibe, acá no se regala nada.");
+      setCustomConsoleLog(prev => [...prev, `[SISTEMA] DNI de ${active.name} verificado. Su edad es legal para la compra.`]);
       setCommandInput("");
       return;
     }
 
-    // 2. "No tengo stock"
-    if (cleanLower.includes("no tengo stock") || cleanLower.includes("no hay stock") || cleanLower.includes("sin stock")) {
+    // No stock exception execution
+    if (cleanLower.includes("no tengo stock") || cleanLower.includes("no hay stock") || cleanLower.includes("sin stock") || cleanLower.includes("quedó sin")) {
       setCommandInput("");
       const currentResStock = stock[requestedStockKey];
+      
       if (currentResStock === 0) {
-        // Correct dismiss! Player gets small point bonus or stays neutral
         playSound("cash");
         setPoints(p => p + 20);
-        setKiosqueroComment("No me mires con esa cara de drama, la aduana no me entrega mercadería. Volvé mañana.");
+        setKiosqueroComment("Y bueh... la aduana no me entrega mercadería de importación. Si querés te doy un chupetín de vuelto.");
         setSaleResult({
           success: true,
           amount_charged: 0,
           correct_price: 0,
           change_given: 0,
-          client_reaction: `¡Ay qué bajón! Bueno che, me voy a buscarlo a otro lado. ${active.name} ladea la cabeza con rictus de resignación porteña.`
+          client_reaction: `¡Qué bajonazo enorme che! No hay caso, me iré a buscarlo a otro lado. ${active.name} se retira del local encogiendo los hombros con rictus de resignación.`
         });
-        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Licencia de faltante aceptada. Sin pérdidas.`]);
+        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Licencia comercial aceptada. Negación de producto correcta por falta auténtica de stock.`]);
       } else {
-        // Punish player because there is stock!
         playSound("error");
         setPoints(p => Math.max(0, p - 50));
-        setKiosqueroComment("Pero qué vago de porquería... ¡si tenés el estante lleno!");
+        setKiosqueroComment("Qué vago insoportable... tenés las repisas casi que revientan de mercadería y mentís de puro haragán.");
         setSaleResult({
           success: false,
           amount_charged: 0,
           correct_price: currentProductPrice,
           change_given: 0,
-          client_reaction: `¡Dejate de joder che, si veo el escaparate lleno de ${active.requested_product}! ${active.name} te mira con desprecio absoluto por tu vagancia.`
+          client_reaction: `¡Pero che escúchame! ¿Seguro que no te queda si veo de acá nomás el estante repleto de ${active.requested_product}? ¡Tenés menos ganas de trabajar que una heladera desenchufada!`
         });
-        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Intento de mentir stock fallido. Penalización de 50 puntos.`]);
+        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Intento fallido de simular falta de mercadería. Penalización de 50 puntos.`]);
       }
       return;
     }
 
-    // 3. "Vendo [producto] por $[precio]"
-    // Regex parsing "Vendo ... por $..."
+    // Sell command execution
     const sellRegex = /vendo\s+([a-zA-Z\-\s]+)\s+por\s+\$?([0-9]+)/i;
     const match = trimmed.match(sellRegex);
 
@@ -413,19 +459,19 @@ export default function App() {
       const matchedProd = match[1].trim().toLowerCase();
       const parsedPriceCharged = parseInt(match[2], 10);
 
-      // Find actual product key corresponding to matched name
-      const actualProductKey = Object.keys(PRODUCT_PRICES).find(
+      // Resolve key matches
+      const resolvedProductKey = Object.keys(PRODUCT_PRICES).find(
         k => k.toLowerCase() === matchedProd || (k === "Coca-Cola" && matchedProd.includes("coca"))
       ) as keyof Stock | undefined;
 
-      if (!actualProductKey) {
+      if (!resolvedProductKey) {
         playSound("error");
-        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Error: Producto "${match[1]}" no reconocido. Intentá de nuevo.`]);
+        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Error: El producto "${match[1]}" no existe en nuestro registro porteño.`]);
         return;
       }
 
-      // Check stock
-      if (stock[actualProductKey] <= 0) {
+      // Assert stock
+      if (stock[resolvedProductKey] <= 0) {
         playSound("error");
         setPoints(p => Math.max(0, p - 50));
         setSaleResult({
@@ -433,56 +479,54 @@ export default function App() {
           amount_charged: parsedPriceCharged,
           correct_price: currentProductPrice,
           change_given: 0,
-          client_reaction: `¡Pero che! Me decís que me vendés, estirás la mano y la caramelera está vacía... ¡No tenés stock de ${actualProductKey}!`
+          client_reaction: `¡Pero pibe! Estirás la mano y el estante está más vacío que bolsillo de fin de mes... ¡No tenés stock de ${resolvedProductKey}!`
         });
-        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Venta fallida. Intentaste vender un producto sin stock.`]);
+        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Venta rechazada. Trato fallido de vender un producto sin stock.`]);
         return;
       }
 
-      // Checks logic:
-      // a. Is it the product requested?
-      const isProductMatch = actualProductKey.toLowerCase() === requestedStockKey.toLowerCase();
-      
-      // b. Is the price correct?
+      // Business match tests
+      const isProductMatch = resolvedProductKey.toLowerCase() === requestedStockKey.toLowerCase();
       const isPriceCorrect = parsedPriceCharged === currentProductPrice;
-
-      // c. Is DNI required and verified?
       const isAgeVerifiedOk = !active.requires_id || isDniCheckedThisTurn;
-
       const isSuccess = isProductMatch && isPriceCorrect && isAgeVerifiedOk;
 
-      const changeToReturn = pagaCon - parsedPriceCharged;
+      // Compute visual change
+      const paymentBill = active.pagaCon;
+      const changeToReturn = paymentBill - parsedPriceCharged;
 
       if (isSuccess) {
         playSound("cash");
         // Subtract stock
         setStock(prev => ({
           ...prev,
-          [actualProductKey]: prev[actualProductKey] - 1
+          [resolvedProductKey]: prev[resolvedProductKey] - 1
         }));
+        
         setPoints(p => p + 100);
         setCash(c => c + parsedPriceCharged);
-        setSalesCount(s => s + 1);
+        
+        const nextSalesCount = salesCount + 1;
+        setSalesCount(nextSalesCount);
 
-        // Advance Time of Day dynamically based on sales count
+        // Adjust Time of Day based on sales count
         let nextTurn = timeOfDay;
-        if (salesCount + 1 >= 10 && salesCount + 1 < 20) {
+        if (nextSalesCount >= 10 && nextSalesCount < 20) {
           nextTurn = "tarde";
-        } else if (salesCount + 1 >= 20) {
+        } else if (nextSalesCount >= 20) {
           nextTurn = "noche";
         }
         setTimeOfDay(nextTurn);
 
-        // Visual Reaction Success fallbacks
-        const reactions: Record<string, string> = {
-          "Mirtha Legrand": "¡Maravilloso, mi amor! Sos muy rápido y sumamente educado... Como te ven te tratan, recordalo siempre. ¡Me llevo mi Alfajor calentito!",
-          "Susana Giménez": "¡Ay, hola che! Qué divino, acá tengo mi agüita fría para arrancar el programa del domingo, ¡Sos un sol de persona, te mando un choclo de besos!",
-          "Ricardo Fort": "¡SÍ! ¡Eso es eficiencia de primer nivel mundial, pibe de barrio! Comé chocolate y andá a Miami. ¡Te dejo el jaguar estacionado en la vereda!",
-          "Wanda Nara": "¡Espectacular canje! Mentira, te pagué con tarjeta black como corresponde. Sos un genio re buena onda, te ganaste una mención en mi feed de Instagram.",
-          "Marcelo Tinelli": "¡Impecable fiera! ¡Chau chau chau chauuuu! El alfajor ya está adentro, el camarógrafo está tentado. ¡Sos un maestro nacional del comercio!",
-          "L-Gante": "¡Al toque gato! Vuelto exacto para el fernet de la previa con los muchachos del club. Cumbia 420 para que baile todo el almacén, genio.",
-          "Juana Viale": "Bueno, al menos me atendiste rápido y no usamos plásticos. Los cigarrillos me los guardo con cargo de conciencia biodegradable. Chau.",
-          "Diego Maradona": "¡GOLAZO del Diego, papa! Metiste la cuenta en el ángulo puro. Te abrazo con alma de campeón, la pelota y la caja registradora no se manchan jamas."
+        const successReactions: Record<string, string> = {
+          "Mirtha Legrand": "¡Maravilloso, mi amor! Sos rápido y sumamente educado... Como te ven te tratan, recordalo siempre. ¡Me llevo mi alfajor calentito para acompañar el té de la tarde!",
+          "Susana Giménez": "¡Ay, hola che! Qué divino, acá tengo mi agüita helada para arrancar el programa. ¡Sos un sol de persona, te mando un choclo de besos gigantescos!",
+          "Ricardo Fort": "¡SÍ! ¡Eso es velocidad premium de nivel Miami, carajo! Comé chocolate de buena calidad, pibe, y comprate un Rolls-Royce. ¡Te dejo propina de millonario!",
+          "Wanda Nara": "¡Espectacular canje de historias de Instagram! Mentira, te pago con la tarjeta black para que veas que soy buena onda. ¡Mándale saludos a los chicos de la cuadra!",
+          "Marcelo Tinelli": "¡Impecable fiera! ¡Chau chau chau chauuuu! El alfajor ya está adentro del mostrador, el sonidista está carraspeando de risa. ¡Sos el mago rey del comercio!",
+          "L-Gante": "¡Al toque gatito! Vuelto exacto de diez lucas para el fernet de la caravana. Cumbia 420 para que baile todo el almacén con la Mafilia, genio absoluto.",
+          "Juana Viale": "Bueno, al menos me atendiste con rapidez y no usamos plásticos rústicos contaminantes. Los cigarrillos me los guardo con cargo de conciencia sustentable. Chau.",
+          "Diego Maradona": "¡GOLAZO del Diego, papa! Pusiste el vuelto clavado al ángulo de la caja. Te abrazo con alma de campeón, la pelota y la registradora no se manchan jamás en la vida."
         };
 
         setSaleResult({
@@ -490,22 +534,22 @@ export default function App() {
           amount_charged: parsedPriceCharged,
           correct_price: currentProductPrice,
           change_given: changeToReturn,
-          client_reaction: reactions[active.name] || "¡Bien cobrado flaco! Un servicio espectacular."
+          client_reaction: successReactions[active.name] || "¡Bien cobrado pibe! Una transacción impecable."
         });
-        setKiosqueroComment("Bajo las persianas un ratito para enfriar las cervezas... impecable el billete.");
-        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Venta aprobada. Suman 100 puntos y $${parsedPriceCharged} a la caja.`]);
+        setKiosqueroComment("Listo maestro. Un billete más al cajón de chapa. Siguiente en fila por favor.");
+        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Trato aprobado. Suman +100 puntos y $${parsedPriceCharged} a la caja.`]);
 
       } else {
         playSound("error");
         setPoints(p => Math.max(0, p - 50));
         
-        let errorReaction = "¡Hiciste cualquier cosa! Así vas a fundir este kiosco de barrio.";
+        let failDialogue = "¡Hiciste cualquier cuenta comercial! Vas a fundir el almacén en dos semanas flaco.";
         if (!isProductMatch) {
-          errorReaction = `¡Pero yo te pedí un ${active.requested_product} y me estás encajando un ${actualProductKey}! ¡Ponete los lentes de contacto, fiera!`;
+          failDialogue = `¡Pero te pedí un ${active.requested_product} y me estás encajando un ${resolvedProductKey}! ¡Ponete los lentes de contacto, fiera!`;
         } else if (!isPriceCorrect) {
-          errorReaction = `¡Pará la mano carero! Registraste $${parsedPriceCharged} pero en la cartela oficial dice clarito que sale $${currentProductPrice}. ¡No me robes!`;
+          failDialogue = `¡Pará la mano carero! Me registrás $${parsedPriceCharged} pero en la cartela oficial dice clarito que sale $${currentProductPrice}. ¡No me robes!`;
         } else if (!isAgeVerifiedOk) {
-          errorReaction = `¡Ey irresponsable! Me estás vendiendo alcohol/cigarrillos para mayores sin pedirme el documento de identidad. ¡Te van a clausurar de por vida!`;
+          failDialogue = `¡Epa, irresponsable! Me estás queriendo encajar tabaco/alcohol sin pedirme el documento de identidad obligatorio. ¡Te clausuran el local en cinco minutos!`;
         }
 
         setSaleResult({
@@ -513,28 +557,32 @@ export default function App() {
           amount_charged: parsedPriceCharged,
           correct_price: currentProductPrice,
           change_given: 0,
-          client_reaction: errorReaction
+          client_reaction: failDialogue
         });
-        setKiosqueroComment("Uf... qué dolor de cabeza, hoy no es mi día de suerte definitivamente.");
-        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Venta rechazada. Descuentan 50 puntos por error comercial.`]);
+        setKiosqueroComment("La cabeza me taladra con el calor porteño... hoy no es mi tarde decididamente.");
+        setCustomConsoleLog(prev => [...prev, `[SISTEMA] Trato declinado. Descuenta -50 puntos por error grave de facturación.`]);
       }
       return;
     }
 
-    // Default error syntax fallback
     playSound("error");
-    setCustomConsoleLog(prev => [...prev, `[SISTEMA] Formato inválido. Escribí exactamente comando como "Vendo ${active.requested_product} por $${currentProductPrice}"`]);
+    setCustomConsoleLog(prev => [...prev, `[SISTEMA] Sintaxis de comando desconocida. Usá los atajos de botones rápidos en la pantalla.`]);
   };
 
   const handleNextClient = () => {
-    playSound("click");
+    playSound("bell");
     setSaleResult(null);
     setIsDniCheckedThisTurn(false);
     setKiosqueroComment(null);
 
-    // Pick next celebrity
+    // Pick next celebrity sequentially
     const nextIdx = (activeClientIndex + 1) % GAME_CLIENTS.length;
     setActiveClientIndex(nextIdx);
+
+    // Give visual animation nudge to Three.js mesh card
+    if (activeMeshRef.current) {
+      activeMeshRef.current.position.y = -2; // drop and bounce up
+    }
   };
 
   const handleRestart = () => {
@@ -562,23 +610,405 @@ export default function App() {
     setIsDniCheckedThisTurn(false);
     setKiosqueroComment(null);
     setSaleResult(null);
-    setCustomConsoleLog(["[SISTEMA] Kiosco reabierto con $5000 de caja base y heladeras llenas."]);
+    setCustomConsoleLog(["[SISTEMA] Simulación reajustada. Caja en $5000 y estanterías recargadas."]);
   };
+
+  // Setup THREE.js 3D View Scene
+  useEffect(() => {
+    if (!canvasRef.current) return;
+
+    // Create scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#0c0a09"); // stone-950 dark base
+    sceneRef.current = scene;
+
+    // Camera setup (first person behind the cashier counter)
+    const camera = new THREE.PerspectiveCamera(
+      45,
+      canvasRef.current.clientWidth / canvasRef.current.clientHeight,
+      0.1,
+      100
+    );
+    camera.position.set(0, 1.8, 4.2); // raised looking down
+    camera.lookAt(0, 1.1, 0);
+
+    // Renderer matching high-res window
+    const renderer = new THREE.WebGLRenderer({
+      canvas: canvasRef.current,
+      antialias: true,
+      alpha: false
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(canvasRef.current.clientWidth, canvasRef.current.clientHeight, false);
+    renderer.shadowMap.enabled = true;
+
+    // Ambient light - changes depending on time of day
+    const ambient = new THREE.AmbientLight("#44403c", 1.2);
+    scene.add(ambient);
+    ambientLightRef.current = ambient;
+
+    // Directional sunset/sunrise sun
+    const dirLight = new THREE.DirectionalLight("#fbbf24", 2.2); // warm gold sun
+    dirLight.position.set(4, 3, 2);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+    directionalLightRef.current = dirLight;
+
+    // Dynamic neon colored lights for Night Mode
+    const neonRed = new THREE.PointLight("#ef4444", 0, 8);
+    neonRed.position.set(-2, 2.5, 0.5);
+    scene.add(neonRed);
+
+    const neonBlue = new THREE.PointLight("#3b82f6", 0, 8);
+    neonBlue.position.set(2, 2.5, 0.5);
+    scene.add(neonBlue);
+
+    neonLightsRef.current = [neonRed, neonBlue];
+
+    // Build the 3D KIOSK ENVIRONMENT using standard primitives with colors:
+    
+    // 1. BACK WALL with Tobacco Rack
+    const wallGeo = new THREE.BoxGeometry(7, 4, 0.2);
+    const wallMat = new THREE.MeshStandardMaterial({ color: "#1c1917", roughness: 0.95 });
+    const wallMesh = new THREE.Mesh(wallGeo, wallMat);
+    wallMesh.position.set(0, 2, -1.2);
+    scene.add(wallMesh);
+
+    // Tobacco rack shelves on back wall
+    const rackGeo = new THREE.BoxGeometry(2.5, 1.8, 0.35);
+    const rackMat = new THREE.MeshStandardMaterial({ color: "#451a03", roughness: 0.9 }); // wood brown
+    const rackMesh = new THREE.Mesh(rackGeo, rackMat);
+    rackMesh.position.set(1.5, 2.2, -1.0);
+    scene.add(rackMesh);
+
+    // Stacks of colored 3D cigarette boxes in the rack
+    const brands: { name: keyof Stock; color: string; offset: number }[] = [
+      { name: "Marlboro", color: PRODUCT_COLORS["Marlboro"], offset: 0.7 },
+      { name: "Camel", color: PRODUCT_COLORS["Camel"], offset: 1.5 },
+      { name: "Lucky Strike", color: PRODUCT_COLORS["Lucky Strike"], offset: 2.3 }
+    ];
+
+    brands.forEach((brand, bIdx) => {
+      for (let y = 0; y < 3; y++) {
+        const boxGeo = new THREE.BoxGeometry(0.5, 0.35, 0.25);
+        const boxMat = new THREE.MeshStandardMaterial({
+          color: brand.color,
+          roughness: 0.5,
+          emissive: brand.color,
+          emissiveIntensity: 0.1
+        });
+        const boxMesh = new THREE.Mesh(boxGeo, boxMat);
+        // stack boxes neatly
+        boxMesh.position.set(0.6 + bIdx * 0.61, 1.6 + y * 0.45, -0.85);
+        scene.add(boxMesh);
+      }
+    });
+
+    // 2. RETRO HELADERA (Beverages Refrigerator) on Left Wall side
+    const fridgeGroup = new THREE.Group();
+    fridgeGroup.position.set(-2, 0, -0.5);
+
+    // fridge chassis
+    const bodyGeo = new THREE.BoxGeometry(1.4, 2.8, 1.2);
+    const bodyMat = new THREE.MeshStandardMaterial({ color: "#bc1a1a", roughness: 0.4 }); // red classic fridge
+    const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+    bodyMesh.position.set(0, 1.4, 0);
+    fridgeGroup.add(bodyMesh);
+
+    // glowing interior backing
+    const interiorGeo = new THREE.BoxGeometry(1.2, 2.5, 0.4);
+    const interiorMat = new THREE.MeshStandardMaterial({
+      color: "#ecfeff", // white backlight
+      emissive: "#a5f3fc",
+      emissiveIntensity: 0.25
+    });
+    const interiorMesh = new THREE.Mesh(interiorGeo, interiorMat);
+    interiorMesh.position.set(0, 1.4, 0.4);
+    fridgeGroup.add(interiorMesh);
+
+    // translucent glass doors
+    const glassGeo = new THREE.BoxGeometry(1.15, 2.4, 0.05);
+    const glassMat = new THREE.MeshPhysicalMaterial({
+      color: "#38bdf8",
+      transparent: true,
+      opacity: 0.32,
+      roughness: 0.1,
+      metalness: 0.1,
+      transmission: 0.9,
+      ior: 1.5
+    });
+    const glassMesh = new THREE.Mesh(glassGeo, glassMat);
+    glassMesh.position.set(0, 1.4, 0.61);
+    fridgeGroup.add(glassMesh);
+
+    // Dynamic 3D bottles sitting on fridge shelves
+    const drinks: { name: keyof Stock; color: string; shelfY: number; shelfX: number }[] = [
+      { name: "Coca-Cola", color: PRODUCT_COLORS["Coca-Cola"], shelfY: 2.1, shelfX: -0.3 },
+      { name: "Coca-Cola", color: PRODUCT_COLORS["Coca-Cola"], shelfY: 2.1, shelfX: 0.3 },
+      { name: "Fanta", color: PRODUCT_COLORS["Fanta"], shelfY: 1.5, shelfX: -0.3 },
+      { name: "Fanta", color: PRODUCT_COLORS["Fanta"], shelfY: 1.5, shelfX: 0.3 },
+      { name: "Agua", color: PRODUCT_COLORS["Agua"], shelfY: 0.9, shelfX: -0.4 },
+      { name: "Cerveza", color: PRODUCT_COLORS["Cerveza"], shelfY: 0.9, shelfX: 0.1 },
+      { name: "Vino", color: PRODUCT_COLORS["Vino"], shelfY: 0.4, shelfX: 0 }
+    ];
+
+    drinks.forEach((drink) => {
+      const btlGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.35, 8);
+      const btlMat = new THREE.MeshStandardMaterial({
+        color: drink.color,
+        roughness: 0.2,
+        emissive: drink.color,
+        emissiveIntensity: 0.2
+      });
+      const btlMesh = new THREE.Mesh(btlGeo, btlMat);
+      // Place inside the cooling space
+      btlMesh.position.set(drink.shelfX, drink.shelfY, 0.45);
+      fridgeGroup.add(btlMesh);
+    });
+
+    scene.add(fridgeGroup);
+
+    // 3. FRONT KIOSQUERO WOODEN COUNTER (Foreground stage looking out)
+    const counterGeo = new THREE.BoxGeometry(6.5, 1.1, 1.7);
+    const counterMat = new THREE.MeshStandardMaterial({ color: "#292524", roughness: 0.85 }); // dark stone/wood counter
+    const counterMesh = new THREE.Mesh(counterGeo, counterMat);
+    counterMesh.position.set(0, 0.55, 1.9);
+    scene.add(counterMesh);
+
+    // 4. RETRO CASH REGISTER on our Counter (Chunky box with a glowing display cylinder)
+    const regGroup = new THREE.Group();
+    regGroup.position.set(-1.2, 1.1, 1.6);
+
+    const regBodyGeo = new THREE.BoxGeometry(0.7, 0.5, 0.7);
+    const regBodyMat = new THREE.MeshStandardMaterial({ color: "#57534e", roughness: 0.6 }); // vintage metal gray
+    const regBody = new THREE.Mesh(regBodyGeo, regBodyMat);
+    regGroup.add(regBody);
+
+    // Register glowing tube price indicator
+    const indicGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.45, 8);
+    const indicMat = new THREE.MeshStandardMaterial({ color: "#22c55e", emissive: "#22c55e", emissiveIntensity: 0.8 }); // glowing green tube
+    const indicator = new THREE.Mesh(indicGeo, indicMat);
+    indicator.rotation.z = Math.PI / 2;
+    indicator.position.set(0, 0.35, 0);
+    regGroup.add(indicator);
+
+    scene.add(regGroup);
+
+    // 5. CARAMELERA DOBLE GLASS CONTAINER on right counter
+    const caramGroup = new THREE.Group();
+    caramGroup.position.set(1.4, 1.1, 1.6);
+
+    const caramGlassGeo = new THREE.BoxGeometry(1.2, 0.65, 0.85);
+    const caramGlass = new THREE.Mesh(caramGlassGeo, glassMat);
+    caramGroup.add(caramGlass);
+
+    // Tiny colorful sweet box shapes inside carameleras
+    const sweetItems: { color: string; px: number; py: number; pz: number }[] = [
+      { color: PRODUCT_COLORS["Alfajor"], px: -0.4, py: -0.2, pz: 0.1 },
+      { color: PRODUCT_COLORS["Alfajor"], px: -0.2, py: -0.2, pz: 0.1 },
+      { color: PRODUCT_COLORS["Chicles"], px: 0.1, py: -0.2, pz: 0.2 },
+      { color: PRODUCT_COLORS["Pastillas"], px: 0.3, py: -0.2, pz: 0.2 },
+      { color: PRODUCT_COLORS["Chocolate"], px: -0.3, py: 0.1, pz: 0 },
+      { color: PRODUCT_COLORS["Chupetín"], px: 0.2, py: 0.1, pz: -0.1 }
+    ];
+
+    sweetItems.forEach((itm) => {
+      const sweetGeo = new THREE.BoxGeometry(0.16, 0.12, 0.22);
+      const sweetMat = new THREE.MeshStandardMaterial({ color: itm.color, roughness: 0.4 });
+      const m = new THREE.Mesh(sweetGeo, sweetMat);
+      m.position.set(itm.px, itm.py, itm.pz);
+      caramGroup.add(m);
+    });
+
+    scene.add(caramGroup);
+
+    // FLOOR
+    const floorGeo = new THREE.PlaneGeometry(12, 12);
+    const floorMat = new THREE.MeshStandardMaterial({ color: "#1c1917", roughness: 0.9 });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(0, 0, 0);
+    scene.add(floor);
+
+    // 6. CLIENT PORTRAIT BILLBOARD HOLDER
+    // Created as a group that floats behind the center of the counter
+    const clientGroup = new THREE.Group();
+    clientGroup.position.set(0, 1.45, 0.2); // center stage
+    scene.add(clientGroup);
+    activeMeshRef.current = clientGroup;
+
+    // Inside customer billboard we construct a beautifully designed caricature board
+    const billboardCardGeo = new THREE.BoxGeometry(1.6, 2.0, 0.12);
+    const billboardCardMat = new THREE.MeshStandardMaterial({
+      color: "#f59e0b", // glowing golden backdrop border
+      roughness: 0.5,
+      metalness: 0.2,
+      emissive: "#ea580c",
+      emissiveIntensity: 0.1
+    });
+    const billboardCard = new THREE.Mesh(billboardCardGeo, billboardCardMat);
+    clientGroup.add(billboardCard);
+
+    // Interactive circular head model structure with colorful chibi background
+    const headBoardGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.05, 16);
+    const headBoardMat = new THREE.MeshStandardMaterial({ color: "#fef3c7" });
+    const headBoard = new THREE.Mesh(headBoardGeo, headBoardMat);
+    headBoard.rotation.x = Math.PI / 2;
+    headBoard.position.set(0, 0.45, 0.08);
+    clientGroup.add(headBoard);
+
+    // Companion accessory meshes (e.g. Maradona's revolving soccer ball or Fort's dollar signs)
+    const accessoryGroup = new THREE.Group();
+    accessoryGroup.position.set(0.9, -0.2, 0.1);
+    clientGroup.add(accessoryGroup);
+
+    const companionGeo = new THREE.SphereGeometry(0.18, 12, 12);
+    const companionMat = new THREE.MeshStandardMaterial({ color: "#ffffff", roughness: 0.2 });
+    const companionMesh = new THREE.Mesh(companionGeo, companionMat);
+    accessoryGroup.add(companionMesh);
+
+    // Little floating text mesh simulated boxes
+    const quoteGeo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
+    const quoteMat = new THREE.MeshStandardMaterial({ color: "#fbbf24", emissive: "#fbbf24", emissiveIntensity: 0.4 });
+    const quoteMesh = new THREE.Mesh(quoteGeo, quoteMat);
+    quoteMesh.position.set(-1.0, 0.5, 0);
+    clientGroup.add(quoteMesh);
+
+    // Raycast Interaction: Mouse clicking on elements inside Three.js Scene handles quick selections
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    const handleCanvasClick = (event: MouseEvent) => {
+      // Calculate coordinates relative to canvas
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+
+      if (intersects.length > 0) {
+        // Find if they clicked the Refrigerator area
+        const clickedName = intersects[0].object.name || "";
+        // Toggle look/feedback
+        playSound("click");
+      }
+    };
+
+    renderer.domElement.addEventListener("click", handleCanvasClick);
+
+    // Animation Tick loop
+    let requestID: number;
+    let clock = new THREE.Clock();
+
+    const animateLoop = () => {
+      requestID = requestAnimationFrame(animateLoop);
+
+      const elapsed = clock.getElapsedTime();
+
+      // Slow idle rotation of client quote boxes
+      quoteMesh.rotation.y = elapsed * 1.5;
+      quoteMesh.rotation.x = Math.sin(elapsed) * 0.5;
+
+      // Accessory rotates (soccer ball spins!)
+      accessoryGroup.rotation.y = elapsed * 3.0;
+      accessoryGroup.position.y = -0.2 + Math.sin(elapsed * 5) * 0.1;
+
+      // Adjust client bounce based on mood state
+      const client = getActiveClient();
+      if (clientGroup) {
+        if (client.mood === "feliz") {
+          clientGroup.position.y = 1.45 + Math.sin(elapsed * 7) * 0.15; // fast happy bounce
+        } else if (client.mood === "dramatico") {
+          clientGroup.position.y = 1.45 + Math.cos(elapsed * 3.5) * 0.25; // wide dramatic wave
+          clientGroup.rotation.z = Math.sin(elapsed * 2) * 0.1;
+        } else if (client.mood === "exigente") {
+          clientGroup.position.y = 1.45 + Math.sin(elapsed * 12) * 0.05; // tiny frustrated jitter
+        } else {
+          clientGroup.position.y = 1.45 + Math.sin(elapsed * 2) * 0.04; // calm idle sway
+          clientGroup.rotation.z = 0;
+        }
+      }
+
+      // Render execution
+      renderer.render(scene, camera);
+    };
+
+    animateLoop();
+
+    // Resize Handler
+    const handleResize = () => {
+      if (!canvasRef.current) return;
+      camera.aspect = canvasRef.current.clientWidth / canvasRef.current.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(canvasRef.current.clientWidth, canvasRef.current.clientHeight, false);
+    };
+
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+    if (canvasRef.current.parentElement) {
+      resizeObserver.observe(canvasRef.current.parentElement);
+    }
+
+    // Cleanup inside destroy loop
+    return () => {
+      cancelAnimationFrame(requestID);
+      renderer.domElement.removeEventListener("click", handleCanvasClick);
+      resizeObserver.disconnect();
+      renderer.dispose();
+    };
+  }, [activeClientIndex]);
+
+  // Adjust lights and color elements dynamically inside Three.js based on timeOfDay change
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    
+    // Ambient color shift
+    if (ambientLightRef.current) {
+      if (timeOfDay === "mañana") {
+        ambientLightRef.current.color.set("#44403c");
+        ambientLightRef.current.intensity = 1.4;
+      } else if (timeOfDay === "tarde") {
+        ambientLightRef.current.color.set("#57534e");
+        ambientLightRef.current.intensity = 1.8;
+      } else {
+        ambientLightRef.current.color.set("#1c1917");
+        ambientLightRef.current.intensity = 0.6;
+      }
+    }
+
+    // Golden sun directional shift
+    if (directionalLightRef.current) {
+      if (timeOfDay === "mañana") {
+        directionalLightRef.current.color.set("#fbbf24");
+        directionalLightRef.current.intensity = 2.5;
+        directionalLightRef.current.position.set(4, 2, 2);
+      } else if (timeOfDay === "tarde") {
+        directionalLightRef.current.color.set("#fafaf9");
+        directionalLightRef.current.intensity = 2.0;
+        directionalLightRef.current.position.set(0.5, 5, 1);
+      } else {
+        directionalLightRef.current.color.set("#1e1b4b");
+        directionalLightRef.current.intensity = 0.3;
+      }
+    }
+
+    // Toggle glowing neon lights for Night
+    const neonIntensity = timeOfDay === "noche" ? 3.0 : 0.0;
+    neonLightsRef.current.forEach(light => {
+      light.intensity = neonIntensity;
+    });
+
+  }, [timeOfDay]);
 
   const activeClient = getActiveClient();
   const currentPrice = PRODUCT_PRICES[activeClient.requested_product as keyof Stock];
 
-  // Helper values for payment UI computation
-  let calculatedPayerBill = 1000;
-  if (currentPrice > 2000) calculatedPayerBill = 5000;
-  else if (currentPrice > 1000) calculatedPayerBill = 2000;
-  else if (currentPrice > 500) calculatedPayerBill = 1000;
-  else calculatedPayerBill = 500;
-
   return (
-    <div className="min-h-screen bg-stone-900 text-stone-100 flex flex-col font-sans selection:bg-amber-400 selection:text-black">
-      {/* HUD Top bar */}
-      <header className="bg-stone-950 border-b-4 border-amber-800 sticky top-0 z-20 px-4 py-3 shadow-md">
+    <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans selection:bg-amber-400 selection:text-black">
+      {/* HUD HEADER */}
+      <header className="bg-stone-900 border-b-4 border-amber-800 sticky top-0 z-25 px-4 py-3 shadow-md">
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
             <div className="bg-amber-950/80 p-2 rounded-xl border border-amber-600 shadow-md">
@@ -586,43 +1016,42 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl font-black tracking-tight uppercase text-amber-500 font-mono leading-none">
-                EL KIOSCO
+                EL KIOSCO 3D
               </h1>
               <p className="text-[10px] text-stone-400 font-semibold block uppercase tracking-widest mt-0.5">
-                Almacén Porteño • Simulación Turno a Turno
+                Simulador del Almacén Porteño • Vista en Primera Persona
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 sm:gap-6">
-            <div className="flex items-center gap-2 bg-stone-900 px-3 py-1.5 rounded-lg border border-stone-800 shadow-inner">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-stone-950 px-3 py-1.5 rounded-lg border border-stone-800 shadow-inner">
               <Award className="w-5 h-5 text-yellow-400" />
               <div className="leading-none">
-                <span className="text-[10px] text-stone-400 block font-mono uppercase">🏆 PUNTOS</span>
-                <span className="text-sm font-bold text-yellow-300 font-mono">{points}</span>
+                <span className="text-[10px] text-stone-400 block font-mono uppercase">🏆 REPUTACIÓN</span>
+                <span className="text-sm font-bold text-yellow-300 font-mono">{points} pts</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 bg-stone-900 px-3 py-1.5 rounded-lg border border-stone-800 shadow-inner">
+            <div className="flex items-center gap-2 bg-stone-950 px-3 py-1.5 rounded-lg border border-stone-800 shadow-inner">
               <DollarSign className="w-5 h-5 text-emerald-400" />
               <div className="leading-none">
-                <span className="text-[10px] text-stone-400 block font-mono uppercase">💵 CAJA KIOSCO</span>
+                <span className="text-[10px] text-stone-400 block font-mono uppercase">💵 CAJA TOTAL</span>
                 <span className="text-sm font-bold text-emerald-400 font-mono">${cash.toLocaleString("es-AR")}</span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 bg-stone-900 px-3 py-1.5 rounded-lg border border-stone-800 shadow-inner">
+            <div className="flex items-center gap-2 bg-stone-950 px-3 py-1.5 rounded-lg border border-stone-800 shadow-inner">
               <Clock className="w-5 h-5 text-amber-400" />
               <div className="leading-none">
-                <span className="text-[10px] text-stone-400 block font-mono uppercase">🌅 TURNO</span>
-                <span className="text-sm font-bold text-amber-400 font-sans uppercase">{timeOfDay} ({salesCount}/10 ventas)</span>
+                <span className="text-[10px] text-stone-400 block font-mono uppercase">🌅 HORA DEL TURNO</span>
+                <span className="text-sm font-bold text-amber-400 font-sans uppercase">{timeOfDay} ({salesCount}/10 vtas)</span>
               </div>
             </div>
 
-            {/* Audio configuration toggling */}
             <button
               onClick={() => setIsMuted(!isMuted)}
-              className="p-2 bg-stone-800 hover:bg-stone-700 border border-stone-755 rounded-lg text-stone-400 hover:text-stone-100 transition cursor-pointer"
+              className="p-2 bg-stone-800 hover:bg-stone-750 border border-stone-700 rounded-lg text-stone-400 hover:text-stone-100 transition cursor-pointer"
               title={isMuted ? "Activar Sonido" : "Silenciar"}
             >
               {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
@@ -632,132 +1061,151 @@ export default function App() {
               onClick={handleRestart}
               className="p-1 px-3 text-xs bg-stone-800 hover:bg-red-950 hover:text-red-400 text-stone-400 rounded-md border border-stone-700 hover:border-red-900 transition flex items-center gap-1 cursor-pointer"
             >
-              <RotateCcw className="w-3.5 h-3.5" /> Recomenzar
+              <RotateCcw className="w-3.5 h-3.5" /> Reset
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Container Dashboard layout splits into simulation visual and state code output */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 xl:grid-cols-12 gap-6">
+      {/* THREE.js CANVAS ARENA STAGE (First Person Perspective) */}
+      <section className="relative w-full bg-stone-950 flex flex-col items-center justify-center border-b-2 border-stone-800">
         
-        {/* LEFT COLUMN: Visual Arena & Game Console Input (7 cols) */}
-        <section className="xl:col-span-7 space-y-6 flex flex-col">
-          
-          {/* Ambient Scene Banner */}
-          <div className="bg-stone-950 p-4 border-l-4 border-amber-600 rounded-r-xl shadow-inner select-none flex items-center gap-3">
-            <span className="text-3xl animate-bounce">🏪</span>
-            <div>
-              <span className="text-[10px] bg-amber-950 text-amber-400 font-bold uppercase tracking-wider px-1.5 py-0.5 rounded font-mono block w-max">
-                ESCENARIO 3D INTERIOR
+        {/* Helper overlay hints to guide user */}
+        <div className="absolute top-4 left-4 z-10 flex gap-2 sm:flex-col text-xs space-y-1 bg-stone-900/90 border border-stone-800 p-3 rounded-lg max-w-sm pointer-events-none select-none">
+          <span className="font-bold text-amber-400 uppercase tracking-wide block">👁️ VISTA PRIMERA PERSONA:</span>
+          <p className="text-stone-300 text-[11px] leading-tight font-sans">
+            Estás parado detrás del mostrador tradicional. Mirá de frente al famoso que entra por la puerta. Las heladeras para bebidas y carameleras dobles están a tu alcance inmediato.
+          </p>
+        </div>
+
+        {/* Float 3D Mood Indicators */}
+        <div className="absolute top-4 right-4 z-10 bg-stone-900/90 border border-stone-800 p-2 rounded-lg text-xs font-mono flex items-center gap-2 select-none">
+          <span className="text-stone-400">Estado de {activeClient.name}:</span>
+          <span className={`px-2 py-0.5 rounded font-black uppercase text-[10px] ${
+            activeClient.mood === "feliz" ? "bg-emerald-950 text-emerald-400 animate-bounce" :
+            activeClient.mood === "dramatico" ? "bg-pink-950 text-pink-400 animate-pulse" :
+            activeClient.mood === "exigente" ? "bg-red-950 text-red-400" : "bg-blue-950 text-blue-400"
+          }`}>
+            {activeClient.mood}
+          </span>
+        </div>
+
+        {/* THREEJS MASTER CANVAS RENDERING BOX */}
+        <div className="w-full h-[52vh] sm:h-[58vh] relative overflow-hidden bg-black flex justify-center items-center">
+          <canvas
+            ref={canvasRef}
+            className="w-full h-full block cursor-crosshair"
+            id="threejs-canvas-store"
+          />
+
+          {/* Interactive 3D Billboard overlaid label HUD inside first-person look */}
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-15 bg-stone-950/95 p-3 rounded-2xl border-2 border-amber-600 flex items-center gap-3 shadow-2xl max-w-lg w-11/12">
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-950 to-amber-700 border border-amber-500 overflow-hidden flex-shrink-0 flex items-center justify-center text-white font-extrabold text-xl select-none uppercase">
+              {activeClient.name.charAt(0)}
+            </div>
+            
+            <div className="flex-1 min-w-0">
+              <span className="text-[9px] bg-amber-500 text-stone-950 font-black px-1.5 py-0.5 rounded-full uppercase tracking-wider block w-max">
+                Cliente Activo en Mostrador
               </span>
-              <p className="text-xs sm:text-sm text-stone-300 italic font-mono mt-0.5">
-                "{getSceneDescription(timeOfDay)}"
+              <p className="text-sm font-black text-white truncate leading-tight mt-0.5">
+                {activeClient.name}
+              </p>
+              <p className="text-[11px] text-stone-300 leading-snug italic mt-0.5">
+                "{activeClient.dialogue}"
               </p>
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* ACTIVE CELEBRITY COMIC AREA CARD */}
-          <div className="bg-stone-950 rounded-2xl border-2 border-stone-800 shadow-2xl overflow-hidden p-6 flex flex-col justify-between space-y-6 relative">
-            <div className="absolute top-2 right-2 flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-              <span className="text-[9px] font-mono text-emerald-400 font-bold uppercase tracking-widest">LIVE MOTOR</span>
-            </div>
+      {/* DASHBOARD GAMEPLAY CONTROLS & RESPONSE JSON */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* LEFT COLUMN: INTERACTIVE CONTROLLER (7 Cols) */}
+        <section className="lg:col-span-7 space-y-6 flex flex-col justify-between">
+          
+          {/* CLIENT SPEECH BALLOON CARD CONTAINER */}
+          <div className="bg-stone-900 rounded-2xl border border-stone-800 p-5 space-y-4 shadow-xl">
+            <h3 className="text-stone-300 font-mono text-xs uppercase tracking-wider border-b border-stone-800 pb-2 flex items-center gap-2">
+              <User className="w-4 h-4 text-amber-500" />
+              <span>DIÁLOGO Y APARIENCIA COMICA DEL CLIENTE</span>
+            </h3>
 
-            {/* Character Header containing look like render */}
-            <div className="flex flex-col sm:flex-row items-center gap-4 bg-stone-900/60 p-4 rounded-xl border border-stone-850">
-              <div className="w-20 h-20 rounded-2xl bg-amber-950/80 border-2 border-amber-700 flex items-center justify-center text-4xl relative overflow-hidden select-none flex-shrink-0 shadow-inner">
-                {activeClient.name.charAt(0)}
-                {activeClient.requires_id && (
-                  <span className="absolute bottom-1 right-1 text-xs bg-red-600 text-white rounded font-black font-mono px-1 border border-white">
-                    18+
-                  </span>
-                )}
-              </div>
-
-              <div className="space-y-1 text-center sm:text-left">
-                <span className="text-[10px] bg-amber-50 text-amber-950 font-bold px-2 py-0.5 rounded-full uppercase tracking-wider font-mono">
-                  GTA Chibi Proporciones 3D
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+              
+              <div className="md:col-span-2 space-y-2">
+                <span className="text-stone-400 font-mono text-xs block">
+                  <strong>Aspecto 3D de Caricatura:</strong>
                 </span>
-                <h2 className="text-xl font-black text-white uppercase font-sans tracking-tight">
-                  {activeClient.name}
-                </h2>
-                <p className="text-xs text-stone-400 leading-relaxed font-sans font-medium">
-                  <strong>Aspecto:</strong> {activeClient.appearance}
+                <p className="text-xs text-stone-300 leading-relaxed bg-stone-950/60 p-3 rounded-lg border border-stone-850">
+                  {activeClient.appearance}
                 </p>
-                <p className="text-[10.5px] text-stone-500 italic leading-none font-sans mt-1">
-                  <strong>Arribo:</strong> {activeClient.entrance}
-                </p>
-              </div>
-            </div>
-
-            {/* Spech bubble character */}
-            <div className="relative py-2 max-w-full select-none">
-              <div className="bg-white text-stone-950 p-5 rounded-3xl relative border-4 border-stone-950 shadow-2xl max-w-lg mx-auto">
-                <div className="absolute w-5 h-5 bg-white border-b-4 border-r-4 border-stone-950 rotate-45 -bottom-2.5 left-10" />
-                <span className="text-[10px] block font-mono font-black text-amber-600 uppercase tracking-widest mb-1">
-                  {activeClient.name} grita:
-                </span>
-                <p className="text-sm font-sans font-black leading-relaxed text-stone-900">
-                  "{activeClient.dialogue}"
-                </p>
-                <div className="mt-3 pt-2.5 border-t border-stone-200 flex flex-wrap items-center gap-1.5 text-xs text-stone-600">
-                  <span className="font-mono uppercase font-bold text-[10px]">Petición:</span>
-                  <span className="bg-stone-100 text-stone-950 font-black px-2 py-0.5 rounded border border-stone-200 uppercase tracking-wide">
-                    {activeClient.requested_product}
+                <div className="pt-1 flex items-center gap-1.5">
+                  <span className="text-[11px] text-stone-500 italic block font-mono">
+                    <strong>Pide:</strong> {activeClient.requested_product} (${currentPrice})
                   </span>
-                  <span className="font-mono font-bold">(${currentPrice})</span>
-                  
-                  <span className="mx-1">•</span>
-                  <span className="font-mono uppercase font-bold text-[10px]">Ofrece:</span>
-                  <span className="bg-emerald-50 text-emerald-800 font-mono font-bold px-1.5 rounded">
-                    ${calculatedPayerBill}
+                  <span className="text-stone-600">•</span>
+                  <span className="text-[11px] text-stone-500 italic block font-mono">
+                    <strong>Paga con:</strong> ${activeClient.pagaCon}
                   </span>
                 </div>
               </div>
+
+              <div className="bg-amber-950/40 p-4 rounded-xl border border-amber-900 flex flex-col space-y-2 text-center items-center justify-center relative select-none">
+                <span className="text-[10px] bg-amber-500 text-stone-950 font-bold px-1.5 rounded font-mono uppercase tracking-widest leading-none">
+                  ORDEN ACTIVA
+                </span>
+                
+                <span className="text-xs text-stone-300">Producto solicitado:</span>
+                <strong className="text-lg text-white font-serif uppercase tracking-tight">
+                  {activeClient.requested_product}
+                </strong>
+                
+                <span className="text-[11px] text-amber-400 font-mono font-bold">
+                  Precio: ${currentPrice}
+                </span>
+              </div>
+
             </div>
 
-            {/* DNI Alert Box conditional */}
+            {/* AGE VERIFICATION DNI BUTTON */}
             {activeClient.requires_id && !isDniCheckedThisTurn && (
-              <div className="bg-red-950/60 border border-red-900 text-red-300 p-3 rounded-lg text-xs leading-relaxed font-semibold flex items-center gap-3">
-                <AlertOctagon className="w-8 h-8 text-red-500 animate-spin flex-shrink-0" />
-                <div>
-                  <span className="font-mono font-black uppercase text-red-400 block">🛑 CONTROL OBLIGATORIO DE DNI</span>
-                  Lleva cerveza o tabaco. Si vendés sin apretar "Pedir DNI/exigir", fallará la venta y perderás reputación.
+              <div className="bg-red-950/50 border-2 border-red-900 text-red-200 p-4 rounded-xl flex flex-col sm:flex-row items-center gap-4 justify-between animate-pulse">
+                <div className="space-y-1 text-center sm:text-left">
+                  <span className="bg-red-800 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase font-mono">
+                    ADVERTENCIA DE MAYORÍA DE EDAD
+                  </span>
+                  <p className="text-xs leading-relaxed text-red-300 font-medium">
+                    El producto solicitado (<strong>{activeClient.requested_product}</strong>) contiene alcohol o tabaco. ¡Tenés que exigir su DNI antes de facturar!
+                  </p>
                 </div>
+                <button
+                  id="action-demand-id"
+                  onClick={() => processGameCommand("Pido DNI antes de vender alcohol o cigarros")}
+                  className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-stone-950 font-black text-xs uppercase tracking-wider rounded-lg transition active:scale-95 cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+                >
+                  💳 PEDIR DNI COBRANDO
+                </button>
               </div>
             )}
 
             {isDniCheckedThisTurn && (
-              <div className="bg-blue-950/60 border border-blue-900 text-blue-300 p-3 rounded-lg text-xs leading-relaxed font-semibold flex items-center gap-3">
-                <ShieldCheck className="w-8 h-8 text-blue-400 animate-bounce flex-shrink-0 animate-pulse" />
-                <div>
-                  <span className="font-mono font-black uppercase text-blue-400 block">✓ DNI VERIFICADO</span>
-                  Documentación del famoso chequeada correctamente. Ya podés realizar la venta sin miedo a que te claven multa.
-                </div>
+              <div className="bg-emerald-950/40 border border-emerald-900 text-emerald-300 p-3 rounded-lg text-xs flex items-center gap-2">
+                <span className="bg-emerald-800 text-white text-[9px] font-black px-1.5 py-0.5 rounded font-mono">DNI OK</span>
+                <span>Edad validada. Ya podés vender sin arriesgarte a pérdidas de reputación de local.</span>
               </div>
             )}
 
-            {/* Kiosquero dry reaction comment */}
-            {kiosqueroComment && (
-              <div className="bg-stone-900 p-3 rounded-lg border border-stone-850 text-xs text-stone-400">
-                💬 <strong className="text-amber-500">Comentario del kiosquero porteño:</strong> "{kiosqueroComment}"
-              </div>
-            )}
-
-            {/* AFTER SALE RESOLUTION DISPLAY (If resolution happens) */}
+            {/* AFTER TRANSACTION REPORT BLOCK */}
             {saleResult && (
               <div className={`p-4 rounded-xl border-2 shadow-lg space-y-2 animate-fade-in ${
                 saleResult.success ? "bg-emerald-950/80 border-emerald-800 text-emerald-300" : "bg-red-950/80 border-red-800 text-red-300"
               }`}>
                 <div className="flex items-center gap-2">
-                  {saleResult.success ? (
-                    <CheckCircle className="w-5 h-5 text-emerald-400" />
-                  ) : (
-                    <AlertOctagon className="w-5 h-5 text-red-400 animate-bounce" />
-                  )}
-                  <h4 className="font-black text-sm uppercase">
-                    RESOLUCIÓN DE LA TRANSACCIÓN:
+                  <Check className="w-5 h-5 text-emerald-400" />
+                  <h4 className="font-extrabold text-sm uppercase">
+                    RESOLUCIÓN DE LA VENTA EN CURSO:
                   </h4>
                 </div>
                 
@@ -765,7 +1213,7 @@ export default function App() {
                   "{saleResult.client_reaction}"
                 </p>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2 border-t border-stone-900 text-[11px] font-mono">
+                <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-stone-800 text-[11px] font-mono select-none">
                   <div>
                     <span className="text-stone-500 block">COBRADO:</span>
                     <strong className="text-stone-200">${saleResult.amount_charged}</strong>
@@ -775,149 +1223,130 @@ export default function App() {
                     <strong className="text-stone-200">${saleResult.correct_price}</strong>
                   </div>
                   <div>
-                    <span className="text-stone-500 block">VUELTO DADO:</span>
+                    <span className="text-stone-500 block">VUELTO ENTREGADO:</span>
                     <strong className="text-stone-200">${saleResult.change_given}</strong>
                   </div>
                 </div>
 
                 <div className="pt-2 flex justify-end">
                   <button
-                    id="btn-next-client"
+                    id="action-advance-client"
                     onClick={handleNextClient}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 active:translate-y-0.5 text-stone-950 font-black text-xs uppercase tracking-wider rounded-md transition cursor-pointer"
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 active:translate-y-0.5 text-stone-950 font-black text-xs uppercase tracking-widest rounded-lg transition cursor-pointer flex items-center gap-1"
                   >
-                    Atender siguiente famoso ➔
+                    Atender próximo famoso ➔
                   </button>
                 </div>
               </div>
             )}
           </div>
 
-          {/* INTERACTIVE INPUT CONTROL TERMINAL & COMMAND SHORTCUTS */}
-          <div className="bg-stone-950 rounded-xl border border-stone-850 p-4 space-y-4">
-            <div className="flex items-center justify-between border-b border-stone-900 pb-2">
-              <div className="flex items-center gap-2 text-stone-300 font-mono text-xs">
-                <Terminal className="w-4 h-4 text-amber-500" />
-                <span>TERMINAL DEL ALMACENERO (INPUT COMMANDS)</span>
-              </div>
-              <span className="text-[10px] text-stone-500 uppercase tracking-widest font-mono select-none">
-                SIM ENGINE v1.2
+          {/* DOCK BAR AND TRADING CONTROLS (QUICK ACTIONS FOR KIOSQUERO) */}
+          <div className="bg-stone-900 rounded-xl border border-stone-850 p-4 space-y-4 shadow-md">
+            <div>
+              <span className="text-[10px] text-stone-400 font-mono uppercase tracking-widest block mb-2">
+                🎮 PANEL DE VENDEDOR (Click rápido para interactuar con {activeClient.name}):
               </span>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                
+                {/* Sale item at exact perfect price button */}
+                <button
+                  id="action-sell-perfect"
+                  onClick={() => processGameCommand(`Vendo ${activeClient.requested_product} por $${currentPrice}`)}
+                  className="bg-amber-600 hover:bg-amber-500 text-stone-950 font-extrabold text-xs uppercase p-3 rounded-lg flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  <span>Vender {activeClient.requested_product} por ${currentPrice}</span>
+                </button>
+
+                {/* Overcharge Client (Rob) button */}
+                <button
+                  id="action-overcharge"
+                  onClick={() => {
+                    const wrongPrice = currentPrice + 400;
+                    processGameCommand(`Vendo ${activeClient.requested_product} por $${wrongPrice}`);
+                  }}
+                  className="bg-stone-800 hover:bg-red-950 hover:text-red-300 text-stone-300 font-bold text-xs uppercase p-3 rounded-lg border border-stone-700 hover:border-red-900 transition active:scale-95 cursor-pointer"
+                >
+                  💸 Sobrecargar precio (${currentPrice + 400})
+                </button>
+
+                {/* Demand Document button */}
+                <button
+                  id="action-check-id-neutral"
+                  onClick={() => processGameCommand("Pido DNI antes de vender alcohol o cigarros")}
+                  className="bg-stone-800 hover:bg-stone-750 text-stone-200 font-bold text-xs p-3 rounded-lg border border-stone-700 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
+                >
+                  💳 Exigir DNI
+                </button>
+
+                {/* Out of Stock exception button */}
+                <button
+                  id="action-declare-no-stock"
+                  onClick={() => processGameCommand("No tengo stock")}
+                  className="bg-stone-800 hover:bg-stone-750 text-stone-200 font-bold text-xs p-3 rounded-lg border border-stone-700 flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
+                >
+                  🚫 Declarar "No tengo stock"
+                </button>
+
+              </div>
             </div>
 
-            {/* Console Log window */}
-            <div className="h-28 bg-stone-900/85 rounded border border-stone-850 p-2 overflow-y-auto space-y-1 font-mono text-[11px] text-stone-400">
-              <p className="text-stone-600 italic">// Consola del simulador. El motor procesa comandos aquí.</p>
+            {/* CLI Console prompt input form */}
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              processGameCommand(commandInput);
+            }} className="pt-2 border-t border-stone-800 flex items-center gap-2">
+              <div className="relative flex-1">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-amber-500 font-bold font-mono text-sm select-none">&gt;</span>
+                <input
+                  id="input-cmd-terminal"
+                  type="text"
+                  placeholder='O escribí manual: "Vendo Chocolate por $700", o "Pido DNI"'
+                  value={commandInput}
+                  onChange={(e) => setCommandInput(e.target.value)}
+                  className="w-full bg-stone-950 border border-stone-800 rounded-lg px-3 pl-6 py-2.5 text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-amber-600 text-xs sm:text-sm font-mono"
+                />
+              </div>
+              <button
+                type="submit"
+                id="btn-cmd-submit"
+                className="bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold font-mono text-xs uppercase px-4 py-2.5 border border-stone-700 rounded-lg active:scale-95 transition cursor-pointer flex-shrink-0"
+              >
+                PROCESAR
+              </button>
+            </form>
+
+            {/* Logger list */}
+            <div className="h-24 bg-stone-950 rounded border border-stone-850 p-2 overflow-y-auto space-y-1 font-mono text-[10px] text-stone-500">
               {customConsoleLog.map((log, idx) => (
                 <p key={idx} className={
-                  log.includes("[SISTEMA]") ? "text-amber-500/90 font-semibold" :
-                  log.startsWith("> ") ? "text-stone-200" : "text-stone-400"
+                  log.includes("[SISTEMA]") ? "text-amber-500/80 font-bold" :
+                  log.startsWith("> ") ? "text-stone-300" : "text-stone-500"
                 }>
                   {log}
                 </p>
               ))}
             </div>
-
-            {/* Autocomplete Quick Assist Shortcuts */}
-            <div>
-              <span className="text-[10px] text-stone-500 uppercase font-mono tracking-wider block mb-1.5 select-none">
-                💡 Atajos rápidos - Hacé clic para rellenar & ejecutar comando:
-              </span>
-              
-              <div className="flex flex-wrap gap-1.5 text-xs">
-                {/* 1. Demand ID */}
-                <button
-                  id="shortcut-check-id"
-                  onClick={() => {
-                    setCommandInput("Pido DNI antes de vender alcohol o cigarros");
-                    playSound("click");
-                  }}
-                  className="bg-stone-900 hover:bg-stone-800 border border-stone-800 p-1.5 rounded cursor-pointer transition text-[11px] text-stone-300"
-                >
-                  💳 Pido DNI
-                </button>
-
-                {/* 2. No Stock */}
-                <button
-                  id="shortcut-no-stock"
-                  onClick={() => {
-                    setCommandInput("No tengo stock");
-                    playSound("click");
-                  }}
-                  className="bg-stone-900 hover:bg-stone-800 border border-stone-800 p-1.5 rounded cursor-pointer transition text-[11px] text-stone-300"
-                >
-                  🚫 No tengo stock
-                </button>
-
-                {/* 3. Sell Correctly */}
-                <button
-                  id="shortcut-sell-correct"
-                  onClick={() => {
-                    setCommandInput(`Vendo ${activeClient.requested_product} por $${currentPrice}`);
-                    playSound("click");
-                  }}
-                  className="bg-amber-950/60 hover:bg-amber-900 border border-amber-800 p-1.5 rounded text-amber-300 font-bold cursor-pointer transition text-[11px]"
-                >
-                  🚀 Vender producto (Precio Justo)
-                </button>
-
-                {/* 4. Sell with wrong price (rob them) */}
-                <button
-                  id="shortcut-sell-carero"
-                  onClick={() => {
-                    const priceCarero = currentPrice + 500;
-                    setCommandInput(`Vendo ${activeClient.requested_product} por $${priceCarero}`);
-                    playSound("click");
-                  }}
-                  className="bg-red-950/50 hover:bg-red-900/60 border border-red-950 p-1.5 rounded text-red-300 cursor-pointer transition text-[11px]"
-                >
-                  💸 Sobrecargar (Carero)
-                </button>
-              </div>
-            </div>
-
-            {/* Command terminal input form */}
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              processGameCommand(commandInput);
-            }} className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-amber-500 font-bold font-mono text-sm select-none">&gt;</span>
-                <input
-                  id="input-terminal-command"
-                  type="text"
-                  placeholder='Escribí "Vendo Alfajor por $600" o "Pido DNI antes de vender..."'
-                  value={commandInput}
-                  onChange={(e) => setCommandInput(e.target.value)}
-                  className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 pl-6 py-2 text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-amber-600 text-xs sm:text-sm font-mono"
-                />
-              </div>
-              <button
-                type="submit"
-                id="btn-submit-command"
-                className="bg-amber-600 hover:bg-amber-700 text-stone-950 font-black font-mono text-xs uppercase px-4 py-2.5 rounded-lg active:scale-95 transition cursor-pointer flex-shrink-0"
-              >
-                PROCESAR
-              </button>
-            </form>
           </div>
 
-          {/* STOCK GRID */}
-          <div className="bg-stone-950 p-4 rounded-xl border border-stone-850">
-            <h3 className="text-stone-300 font-mono text-xs uppercase tracking-wider mb-2 select-none">
-              📦 ESTANTES DE MERCADERÍA EN TIENDA (STOCK RESTANTE):
-            </h3>
+          {/* PRODUCTS STOCK CHECK GRID */}
+          <div className="bg-stone-900 p-4 rounded-xl border border-stone-850 shadow-md">
+            <h4 className="text-stone-300 font-mono text-xs uppercase tracking-wider mb-2 select-none">
+              📦 REGISTRO DE STOCK FISICO EN KIOSCO 3D:
+            </h4>
             <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
               {Object.entries(stock).map(([prodName, qty]) => {
                 const price = PRODUCT_PRICES[prodName as keyof Stock];
                 const ageLimit = IS_ADULT_ONLY[prodName as keyof Stock];
                 return (
-                  <div key={prodName} className="bg-stone-900 p-2 rounded border border-stone-850 flex flex-col justify-between text-center select-none">
+                  <div key={prodName} className="bg-stone-950 p-2 rounded border border-stone-850 flex flex-col justify-between text-center select-none">
                     <span className="text-[11px] font-bold text-stone-200 truncate">{prodName}</span>
                     <span className="font-mono text-[10px] text-stone-500 font-medium block mt-0.5">${price}</span>
                     <div className="mt-1.5 flex items-center justify-between">
                       <span className={`text-[9px] uppercase px-1 rounded font-black ${
-                        ageLimit ? "bg-red-950 text-red-400" : "bg-stone-950 text-stone-500"
+                        ageLimit ? "bg-red-950 text-red-400" : "bg-stone-900 text-stone-500"
                       }`}>
                         {ageLimit ? "18+" : "Libre"}
                       </span>
@@ -933,21 +1362,22 @@ export default function App() {
 
         </section>
 
-        {/* RIGHT COLUMN: Formal Live JSON output viewer requested (5 cols) */}
-        <section className="xl:col-span-5 flex flex-col space-y-4">
-          <div className="bg-stone-950 p-4 rounded-2xl border-2 border-stone-800 shadow-xl flex-1 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-stone-900 pb-2.5 mb-3">
+        {/* RIGHT COLUMN: STRUCTURAL API LIVE JSON RESPONSES (5 Cols) */}
+        <section className="lg:col-span-5 flex flex-col space-y-4">
+          <div className="bg-stone-900 p-4 rounded-2xl border border-stone-800 shadow-xl flex-1 flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between border-b border-stone-800 pb-2.5">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                  <h3 className="font-mono text-xs uppercase tracking-widest font-black text-amber-500 flex items-center gap-1.5">
+                  <h3 className="font-mono text-xs uppercase tracking-widest font-black text-amber-500">
                     Live JSON State Frame
                   </h3>
                 </div>
+                
                 <button
-                  id="btn-copy-json"
+                  id="btn-copy-live-json"
                   onClick={copyJSONToClipboard}
-                  className="p-1.5 bg-stone-900 hover:bg-stone-800 border border-stone-800 hover:border-stone-700 text-stone-400 hover:text-stone-200 rounded transition flex items-center gap-1 text-[10px] cursor-pointer"
+                  className="p-1.5 bg-stone-950 hover:bg-stone-800 border border-stone-800 hover:border-stone-700 text-stone-400 hover:text-stone-200 rounded transition flex items-center gap-1 text-[10px] cursor-pointer"
                   title="Copiar JSON de respuesta estructurado"
                 >
                   {isCopySuccess ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -955,21 +1385,21 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="bg-stone-900/40 p-2 rounded-lg border border-stone-900 text-xs text-stone-400 flex items-start gap-2 mb-3">
+              <div className="bg-stone-950 p-3 rounded-lg border border-stone-850 text-xs text-stone-400 flex items-start gap-2 select-none">
                 <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                 <p className="font-sans leading-tight text-[10.5px]">
-                  Abajo ves el frame de respuesta estructurado exacto que se genera turno a turno de acuerdo a tus mandatos precisos. El motor actualiza el JSON dinámicamente con cada comando procesado.
+                  Abajo ves el frame de respuesta estructurado exacto que se genera turno a turno para el simulador interactivo de acuerdo a las pautas.
                 </p>
               </div>
 
               {/* JSON code block render */}
-              <div className="bg-stone-950 p-3 rounded-lg border border-stone-850 overflow-auto max-h-[70vh] sm:max-h-[64vh] text-[10px] font-mono text-stone-300">
+              <div className="bg-stone-950 p-3 rounded-lg border border-stone-850 overflow-auto max-h-[64vh] text-[10px] font-mono text-stone-300">
                 <pre>{JSON.stringify(getGameStateJSON(), null, 2)}</pre>
               </div>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-stone-900 text-[11px] text-stone-500 leading-tight">
-              🎮 <strong>Para jugar desde el chat:</strong> Escribí tus comandos en español bajo las directivas. Por ejemplo: <strong className="text-stone-400">Vendo Alfajor por $600</strong>. El agente te responderá siempre con el JSON actualizado representativo.
+            <div className="mt-4 pt-3 border-t border-stone-800 text-[11px] text-stone-500 leading-tight">
+              🎮 <strong>Para interactuar desde el chat:</strong> Escribí tus comandos en español bajo las directivas. Por ejemplo: <strong className="text-stone-300">Vendo Alfajor por $600</strong> o <strong className="text-stone-300">Pido DNI antes de vender</strong>.
             </div>
           </div>
         </section>
@@ -977,13 +1407,13 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
-      <footer className="bg-stone-950 border-t border-stone-900 py-3 px-4 text-center text-xs text-stone-500 font-mono">
+      <footer className="bg-stone-900 border-t border-stone-800 py-3 px-4 text-center text-xs text-stone-500 font-mono">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
           <span>
-            Diseño: GTA Chibi Estilo Realista Cómico • El Kiosco 2026.
+            Diseño: Kiosco 3D Primera Persona • El Kiosco 2026.
           </span>
           <span className="text-amber-500/80">
-            A las 10 ventas sube el turno (tarde), a las 20 sube el turno (noche).
+            A las 10 ventas cambia el turno (Tarde), a las 20 cambia el turno (Noche).
           </span>
         </div>
       </footer>
